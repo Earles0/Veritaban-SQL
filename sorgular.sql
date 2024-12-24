@@ -22,7 +22,7 @@ CREATE TABLE BaseUsers (
     user_id SERIAL PRIMARY KEY,
     username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    PASSWORD VARCHAR(255) NOT NULL,
     registration_date DATE DEFAULT CURRENT_DATE,
     user_type VARCHAR(10) NOT NULL CHECK (user_type IN ('Admin', 'Dev', 'Normal')) -- Disjoint Mantığı
 );
@@ -35,7 +35,7 @@ CREATE TABLE Admins (
 );
 
 -- Geliştirici Kullanıcılar Tablosu (BaseUsers ile Disjoint ve Kalıtım)
-create TABLE DevUsers (
+CREATE TABLE DevUsers (
     user_id INTEGER PRIMARY KEY REFERENCES BaseUsers(user_id) ON DELETE CASCADE,
     sirket_adi VARCHAR(255),
     onayli_gelistirici BOOLEAN DEFAULT FALSE
@@ -121,7 +121,7 @@ BEGIN;
 
 -- BaseUsers tablosuna normal kullanıcı ekle
 WITH inserted_user AS (
-    INSERT INTO BaseUsers (username, email, password, user_type)
+    INSERT INTO BaseUsers (username, email, PASSWORD, user_type)
     VALUES ('erenalbayrak', 'eren@example.com', 'securepassword123', 'Normal')
     RETURNING user_id
 )
@@ -161,8 +161,12 @@ BEFORE INSERT ON "baseusers"
 FOR EACH ROW
 EXECUTE PROCEDURE set_random_password();
 
-CREATE OR REPLACE FUNCTION delete_user_by_id(p_user_id INTEGER)
-RETURNS VOID AS $$
+
+CREATE OR REPLACE PROCEDURE delete_user_by_id(p_user_id INTEGER)
+-- Kullanıcı ID'sine göre kullanıcı ve ilişkili verileri silen saklı yordam
+    LANGUAGE plpgsql
+AS
+$$
 BEGIN
     -- Kullanıcıya bağlı tablolarda verileri sil
     DELETE FROM normalusers WHERE user_id = p_user_id;
@@ -172,15 +176,17 @@ BEGIN
     -- BaseUsers tablosundaki kullanıcıyı sil
     DELETE FROM baseusers WHERE user_id = p_user_id;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
-CREATE OR REPLACE FUNCTION add_developer(
+
+CREATE OR REPLACE PROCEDURE add_developer(
     p_username VARCHAR(255),
     p_email VARCHAR(255),
     p_company_name VARCHAR(255),
     p_verified BOOLEAN
 )
-RETURNS VOID AS
+LANGUAGE plpgsql
+AS
 $$
 BEGIN
     -- BaseUsers tablosuna yeni kullanıcı ekle
@@ -193,17 +199,16 @@ BEGIN
     INSERT INTO DevUsers (user_id, sirket_adi, onayli_gelistirici)
     SELECT user_id, p_company_name, p_verified FROM inserted_user;
 
-    
 END;
-$$
-LANGUAGE plpgsql;
+$$;
 
-CREATE OR REPLACE FUNCTION add_admin(
+CREATE OR REPLACE PROCEDURE add_admin(
     p_username VARCHAR(255),
     p_email VARCHAR(255),
     p_yetki_seviyesi INTEGER
 )
-RETURNS VOID AS
+LANGUAGE plpgsql
+AS
 $$
 BEGIN
     -- BaseUsers tablosuna yeni kullanıcı ekle
@@ -218,21 +223,28 @@ BEGIN
 
     -- Yeni kullanıcı Admin olarak eklendi
 END;
-$$
-LANGUAGE plpgsql;
+$$;
 
-CREATE OR REPLACE FUNCTION update_admin_authority(user_id_to_update INTEGER, new_authority_level INTEGER)
-RETURNS VOID AS $$
+CREATE OR REPLACE PROCEDURE update_admin_authority(
+    user_id_to_update INTEGER, 
+    new_authority_level INTEGER
+)
+LANGUAGE plpgsql
+AS
+$$
 BEGIN
+    -- Admin yetki seviyesini güncelle
     UPDATE admins
     SET yetki_seviyesi = new_authority_level
     WHERE user_id = user_id_to_update;
 
+    -- Eğer hiçbir satır güncellenmemişse, hata mesajı ver
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Admin with user_id % does not exist.', user_id_to_update;
     END IF;
 END;
-$$ LANGUAGE plpgsql;
+$$;
+
 
 CREATE OR REPLACE FUNCTION normalize_email()
 RETURNS TRIGGER AS $$
@@ -297,20 +309,22 @@ INSERT INTO Categories (category_name) VALUES
 ('Story-driven'),
 ('Battle Royale');
 
-
-CREATE OR REPLACE FUNCTION add_game(
+CREATE OR REPLACE PROCEDURE add_game(
     p_category_id INT,
     p_developer_id INT,
     p_game_name VARCHAR,
     p_price NUMERIC,
     p_publisher_id INT
 )
-RETURNS VOID AS $$
+LANGUAGE plpgsql
+AS
+$$
 BEGIN
+    -- Yeni oyun ekle
     INSERT INTO games (category_id, developer_id, game_name, price, publisher_id)
     VALUES (p_category_id, p_developer_id, p_game_name, p_price, p_publisher_id);
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE OR REPLACE FUNCTION calculate_purchase_price()
 RETURNS TRIGGER AS $$
